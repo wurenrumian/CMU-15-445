@@ -40,5 +40,12 @@ class SortExecutor : public AbstractExecutor {
  private:
   /** The sort plan node to be executed */
   const SortPlanNode *plan_;
+
+  /** 提供待排序输入的子算子。 */
+  std::unique_ptr<AbstractExecutor> child_executor_;
+
+  /** 排好序的全部元组，以及读出到第几条。 */
+  std::vector<Tuple> sorted_;
+  size_t cursor_{0};
 };
 }  // namespace bustub

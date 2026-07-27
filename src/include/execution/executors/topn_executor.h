@@ -52,5 +52,12 @@ class TopNExecutor : public AbstractExecutor {
   const TopNPlanNode *plan_;
   /** The child executor from which tuples are obtained */
   std::unique_ptr<AbstractExecutor> child_executor_;
+
+  /** 最终产出的前 N 条（已按 ORDER BY 排好序），以及读到第几条。 */
+  std::vector<Tuple> top_;
+  size_t cursor_{0};
+
+  /** 堆中当前保留的条数，供 topn_check_executor 校验。 */
+  size_t heap_size_{0};
 };
 }  // namespace bustub

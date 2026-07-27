@@ -43,5 +43,8 @@ class LimitExecutor : public AbstractExecutor {
 
   /** The child executor from which tuples are obtained */
   std::unique_ptr<AbstractExecutor> child_executor_;
+
+  /** 已经向上层吐出的行数。到达 plan_->GetLimit() 后就不再向子算子拉取。 */
+  size_t emitted_{0};
 };
 }  // namespace bustub

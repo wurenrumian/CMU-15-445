@@ -59,6 +59,24 @@ auto GenerateNewUndoLog(const Schema *schema, const Tuple *base_tuple, const Tup
 auto GenerateUpdatedUndoLog(const Schema *schema, const Tuple *base_tuple, const Tuple *target_tuple,
                             const UndoLog &log) -> UndoLog;
 
+/**
+ * @brief 检查写写冲突；一旦冲突就把事务标记为 TAINTED 并抛出 ExecutionException。
+ *
+ * 快照隔离允许「读旧版本」，但**不允许两个事务同时改同一行**。
+ * 详见 execution_common.cpp 中的 P4 STEP 13。
+ */
+void CheckWriteConflict(const TupleMeta &meta, Transaction *txn);
+
+/**
+ * @brief 为一次修改准备好 undo log 并挂上版本链。
+ *
+ * 会自动区分「本事务第一次改这一行」和「本事务再次改这一行」两种情况。
+ *
+ * @param target_tuple 修改后的元组；传 nullptr 表示这是一次删除。
+ */
+void PrepareUndoLog(TransactionManager *txn_mgr, Transaction *txn, const Schema *schema, RID rid, const TupleMeta &meta,
+                    const Tuple &base_tuple, const Tuple *target_tuple, std::optional<UndoLink> undo_link);
+
 void TxnMgrDbg(const std::string &info, TransactionManager *txn_mgr, const TableInfo *table_info,
                TableHeap *table_heap);
 

@@ -68,18 +68,53 @@ class SimpleAggregationHashTable {
    * @param input The input value
    */
   void CombineAggregateValues(AggregateValue *result, const AggregateValue &input) {
+    // ==== P3 STEP 9: 聚合的增量合并规则 ====
+    // 每来一条元组就把它「折叠」进已有的中间结果，全程只保留每个分组一份状态，
+    // 内存占用是 O(分组数) 而不是 O(行数)。
+    //
+    // SQL 的 NULL 语义是这里的全部难点：
+    //   - COUNT(*) 数的是**行**，NULL 也算，所以无条件 +1。
+    //   - COUNT(col) / SUM / MIN / MAX 都**跳过** NULL 输入。
+    //   - 这几个的初始值是 NULL（而非 0），表示「还没见过任何非空值」。
+    //     所以合并时要先判断「当前结果是不是 NULL」：是的话直接取输入值作为起点，
+    //     否则才做真正的累加/比较。
+    //     这正是为什么 `SELECT SUM(x) FROM empty_table` 返回 NULL 而不是 0，
+    //     而 `SELECT COUNT(*) FROM empty_table` 返回 0。
     for (uint32_t i = 0; i < agg_exprs_.size(); i++) {
+      const auto &in = input.aggregates_[i];
+      auto &out = result->aggregates_[i];
+
       switch (agg_types_[i]) {
         case AggregationType::CountStarAggregate:
+          // 初始值是整数 0，且不跳过 NULL —— 数的是行数。
+          out = out.Add(ValueFactory::GetIntegerValue(1));
+          break;
+
         case AggregationType::CountAggregate:
+          if (!in.IsNull()) {
+            out = out.IsNull() ? ValueFactory::GetIntegerValue(1) : out.Add(ValueFactory::GetIntegerValue(1));
+          }
+          break;
+
         case AggregationType::SumAggregate:
+          if (!in.IsNull()) {
+            out = out.IsNull() ? in : out.Add(in);
+          }
+          break;
+
         case AggregationType::MinAggregate:
+          if (!in.IsNull()) {
+            out = out.IsNull() ? in : out.Min(in);
+          }
+          break;
+
         case AggregationType::MaxAggregate:
+          if (!in.IsNull()) {
+            out = out.IsNull() ? in : out.Max(in);
+          }
           break;
       }
     }
-
-    UNIMPLEMENTED("TODO(P3): Add implementation.");
   }
 
   /**
@@ -189,9 +224,19 @@ class AggregationExecutor : public AbstractExecutor {
   std::unique_ptr<AbstractExecutor> child_executor_;
 
   /** Simple aggregation hash table */
-  // TODO(Student): Uncomment SimpleAggregationHashTable aht_;
+  SimpleAggregationHashTable aht_;
 
   /** Simple aggregation hash table iterator */
-  // TODO(Student): Uncomment SimpleAggregationHashTable::Iterator aht_iterator_;
+  SimpleAggregationHashTable::Iterator aht_iterator_;
+
+  /**
+   * @brief 是否已经把结果集全部产出完。
+   *
+   * 需要它是因为 `aht_iterator_ == aht_.End()` 这个条件在两种情况下都成立：
+   * 「还没开始」和「已经结束」。而空表上的无分组聚合还要额外补一行默认值
+   *（`SELECT COUNT(*) FROM empty` 必须返回 0，而不是零行），
+   * 那一行是在哈希表之外单独产生的，也需要这个标志来保证只产出一次。
+   */
+  bool finished_{false};
 };
 }  // namespace bustub

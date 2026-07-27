@@ -46,5 +46,14 @@ class DeleteExecutor : public AbstractExecutor {
 
   /** The child executor from which RIDs for deleted tuples are pulled */
   std::unique_ptr<AbstractExecutor> child_executor_;
+
+  /** 目标表。 */
+  std::shared_ptr<TableInfo> table_info_;
+
+  /** 该表上的所有索引，删除时要同步摘掉对应的键项。 */
+  std::vector<std::shared_ptr<IndexInfo>> indexes_;
+
+  /** 与 InsertExecutor 同理：删除是阻塞式算子，结果行只产出一次。 */
+  bool done_{false};
 };
 }  // namespace bustub

@@ -103,7 +103,26 @@ struct AggregateKey {
    * @return `true` if both aggregate keys have equivalent group-by expressions, `false` otherwise
    */
   auto operator==(const AggregateKey &other) const -> bool {
+    // ==== P3 STEP 11: GROUP BY 里的 NULL 必须特殊处理 ====
+    // SQL 的三值逻辑规定 `NULL = NULL` 的结果是 **UNKNOWN**（这里是 CmpBool::CmpNull），
+    // 既不是真也不是假。但 GROUP BY 的语义恰恰相反：所有 NULL 被归为**同一个分组**
+    // （`SELECT c, COUNT(*) ... GROUP BY c` 对 NULL 只输出一行）。
+    //
+    // 直接用 CompareEquals 会让两个 NULL 键判为「不相等」，后果非常隐蔽：
+    // SimpleAggregationHashTable::InsertCombine 先 `ht_.count(k)==0` 判断并 insert，
+    // 紧接着 `ht_[k]` 又找不到刚插进去的那条（因为 operator== 说它俩不等），
+    // 于是 unordered_map::operator[] **默认构造**一个 AggregateValue —— 它的
+    // aggregates_ 是空 vector。随后 CombineAggregateValues 越界访问，
+    // 拿到一个 type_id_ 非法的 Value，在 Value::Add 里解引用空的 Type 实例直接段错误。
     for (uint32_t i = 0; i < other.group_bys_.size(); i++) {
+      const bool lhs_null = group_bys_[i].IsNull();
+      const bool rhs_null = other.group_bys_[i].IsNull();
+      if (lhs_null || rhs_null) {
+        if (lhs_null != rhs_null) {
+          return false;  // 一边 NULL 一边非 NULL：不同分组。
+        }
+        continue;  // 两边都是 NULL：视为相同，继续比下一列。
+      }
       if (group_bys_[i].CompareEquals(other.group_bys_[i]) != CmpBool::CmpTrue) {
         return false;
       }

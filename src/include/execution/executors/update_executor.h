@@ -46,9 +46,15 @@ class UpdateExecutor : public AbstractExecutor {
   const UpdatePlanNode *plan_;
 
   /** Metadata identifying the table that should be updated */
-  const TableInfo *table_info_;
+  std::shared_ptr<TableInfo> table_info_;
 
   /** The child executor to obtain value from */
   std::unique_ptr<AbstractExecutor> child_executor_;
+
+  /** 该表上的所有索引。更新会改变键值，索引项必须「先删旧、再插新」。 */
+  std::vector<std::shared_ptr<IndexInfo>> indexes_;
+
+  /** 与 Insert/Delete 同理：更新是阻塞式算子，结果行只产出一次。 */
+  bool done_{false};
 };
 }  // namespace bustub

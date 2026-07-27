@@ -11,6 +11,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "execution/executors/sort_executor.h"
+#include <algorithm>
+#include <memory>
+#include <utility>
+#include <vector>
+#include "execution/execution_common.h"
 
 namespace bustub {
 
@@ -21,10 +26,38 @@ namespace bustub {
  */
 SortExecutor::SortExecutor(ExecutorContext *exec_ctx, const SortPlanNode *plan,
                            std::unique_ptr<AbstractExecutor> &&child_executor)
-    : AbstractExecutor(exec_ctx) {}
+    : AbstractExecutor(exec_ctx), plan_(plan), child_executor_(std::move(child_executor)) {}
 
 /** Initialize the sort */
-void SortExecutor::Init() { throw NotImplementedException("SortExecutor is not implemented"); }
+void SortExecutor::Init() {
+  child_executor_->Init();
+  sorted_.clear();
+  cursor_ = 0;
+
+  // ==== P3 STEP 23: 内存排序 ====
+  // 与 ExternalMergeSortExecutor 的分工：数据能全部装进内存时用这个算子，
+  // 装不下才需要外部归并排序把中间结果落到页上。
+  // 两者的比较逻辑完全共用 TupleComparator + GenerateSortKey。
+  const auto &schema = child_executor_->GetOutputSchema();
+  const auto &order_bys = plan_->GetOrderBy();
+  TupleComparator cmp{order_bys};
+
+  std::vector<SortEntry> entries;
+  std::vector<Tuple> tuples;
+  std::vector<RID> rids;
+  while (child_executor_->Next(&tuples, &rids, BUSTUB_BATCH_SIZE)) {
+    for (const auto &tuple : tuples) {
+      entries.emplace_back(GenerateSortKey(tuple, order_bys, schema), tuple);
+    }
+  }
+
+  std::sort(entries.begin(), entries.end(), cmp);
+
+  sorted_.reserve(entries.size());
+  for (auto &entry : entries) {
+    sorted_.push_back(std::move(entry.second));
+  }
+}
 
 /**
  * Yield the next tuple batch from the sort.
@@ -35,7 +68,13 @@ void SortExecutor::Init() { throw NotImplementedException("SortExecutor is not i
  */
 auto SortExecutor::Next(std::vector<bustub::Tuple> *tuple_batch, std::vector<bustub::RID> *rid_batch, size_t batch_size)
     -> bool {
-  return false;
+  tuple_batch->clear();
+  rid_batch->clear();
+  while (cursor_ < sorted_.size() && tuple_batch->size() < batch_size) {
+    tuple_batch->push_back(sorted_[cursor_++]);
+    rid_batch->emplace_back();
+  }
+  return !tuple_batch->empty();
 }
 
 }  // namespace bustub
