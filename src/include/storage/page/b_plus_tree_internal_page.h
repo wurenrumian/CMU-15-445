@@ -64,6 +64,56 @@ class BPlusTreeInternalPage : public BPlusTreePage {
 
   auto ValueAt(int index) const -> ValueType;
 
+  /* ==================== 以下为本实现新增的辅助接口 ==================== */
+
+  /** @brief 覆盖第 index 个孩子指针。 */
+  void SetValueAt(int index, const ValueType &value) { page_id_array_[index] = value; }
+
+  /**
+   * @brief 二分查找：给定 key，返回应当下降到的孩子的下标。
+   *
+   * 内部页的语义是 `PAGE_ID(i)` 指向的子树中所有键 K 满足 `KEY(i) <= K < KEY(i+1)`，
+   * 且 `KEY(0)` 恒为无效值（因为 n 个键要分隔 n+1 个孩子，最左边那个没有下界）。
+   * 所以要找的是「最后一个满足 KeyAt(i) <= key 的 i」，下标 0 是兜底答案。
+   */
+  auto ChildIndexFor(const KeyType &key, const KeyComparator &comparator) const -> int {
+    // 在 [1, size) 上二分找第一个 KeyAt(mid) > key，其前一个就是答案。
+    int lo = 1;
+    int hi = GetSize();
+    while (lo < hi) {
+      int mid = lo + (hi - lo) / 2;
+      if (comparator(KeyAt(mid), key) <= 0) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    return lo - 1;
+  }
+
+  /** @brief 在下标 index 处插入一对 (key, child)，其后整体右移。 */
+  void InsertAt(int index, const KeyType &key, const ValueType &value);
+
+  /** @brief 删除下标 index 处的 (key, child)，其后整体左移。 */
+  void RemoveAt(int index);
+
+  /** @brief 分裂：把 [start, GetSize()) 的条目搬到 recipient。 */
+  void MoveHalfTo(BPlusTreeInternalPage *recipient, int start);
+
+  /**
+   * @brief 合并：把本页所有条目追加到 recipient 末尾。
+   *
+   * @param middle_key 父节点中分隔这两页的键。内部页的第 0 个键是无效的，
+   *        合并时必须用父节点的分隔键把它「补齐」，否则搜索路径会断掉。
+   */
+  void MoveAllTo(BPlusTreeInternalPage *recipient, const KeyType &middle_key);
+
+  /** @brief 借用：把本页第一个条目搬到 recipient 末尾（middle_key 同上，用于补齐）。 */
+  void MoveFirstToEndOf(BPlusTreeInternalPage *recipient, const KeyType &middle_key);
+
+  /** @brief 借用：把本页最后一个条目搬到 recipient 开头。 */
+  void MoveLastToFrontOf(BPlusTreeInternalPage *recipient, const KeyType &middle_key);
+
   /**
    * @brief For test only, return a string representing all keys in
    * this internal page, formatted as "(key1,key2,key3,...)"

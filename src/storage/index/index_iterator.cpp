@@ -19,26 +19,15 @@
 
 namespace bustub {
 
-/**
- * @note you can change the destructor/constructor method here
- * set your own input parameters
- */
-FULL_INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE::IndexIterator() = default;
-
-FULL_INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE::~IndexIterator() = default;  // NOLINT
-
-FULL_INDEX_TEMPLATE_ARGUMENTS
-auto INDEXITERATOR_TYPE::IsEnd() -> bool { UNIMPLEMENTED("TODO(P2): Add implementation."); }
-
-FULL_INDEX_TEMPLATE_ARGUMENTS
-auto INDEXITERATOR_TYPE::operator*() -> std::pair<const KeyType &, const ValueType &> {
-  UNIMPLEMENTED("TODO(P2): Add implementation.");
-}
-
-FULL_INDEX_TEMPLATE_ARGUMENTS
-auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & { UNIMPLEMENTED("TODO(P2): Add implementation."); }
+// ==== P2 STEP 10: 为什么这里只剩下模板实例化 ====
+// IndexIterator 的全部成员函数都定义在头文件里（见 index_iterator.h）。
+// 这不是偷懒，而是必需的：`operator*` 返回页内数据的引用，`SkipDeleted()`
+// 需要在页与页之间跳转，两者都强依赖 LeafPage 的完整定义；把它们放在头里
+// 既让编译器有机会内联掉这些一行函数，也避免了在 .cpp 里重复一遍冗长的
+// FULL_INDEX_TEMPLATE_ARGUMENTS 签名。
+//
+// 但显式实例化必须留在这里：B+ 树被 GenericKey<4/8/16/32/64> 等多种键类型
+// 使用，在这个唯一的编译单元里集中实例化，可以避免每个 .cpp 都重新展开一遍模板。
 
 template class IndexIterator<GenericKey<4>, RID, GenericComparator<4>>;
 
