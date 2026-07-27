@@ -11,7 +11,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "buffer/lru_k_replacer.h"
+#include <limits>
+#include <mutex>  // NOLINT
+#include <optional>
+#include <utility>
 #include "common/exception.h"
+#include "common/macros.h"
 
 namespace bustub {
 
@@ -39,7 +44,50 @@ LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_fra
  *
  * @return the frame ID if a frame is successfully evicted, or `std::nullopt` if no frames can be evicted.
  */
-auto LRUKReplacer::Evict() -> std::optional<frame_id_t> { return std::nullopt; }
+auto LRUKReplacer::Evict() -> std::optional<frame_id_t> {
+  std::scoped_lock lock(latch_);
+
+  // ==== P1 STEP 5: 在「+inf 组」和「有限组」之间做两级比较 ====
+  // 淘汰规则按优先级：
+  //   1) 优先淘汰历史不足 K 次的帧（backward k-distance = +inf）；
+  //      这类帧之间用经典 LRU 打平局，即最早那次访问时间戳最小的先走。
+  //   2) 若所有可驱逐帧都攒满了 K 次历史，则淘汰倒数第 K 次访问最久远的那个，
+  //      同样等价于「EarliestTimestamp() 最小」。
+  // 两组各自维护一个当前最优，最后 +inf 组优先胜出。
+  std::optional<frame_id_t> inf_victim;     // 历史不满 K 次的候选
+  std::optional<frame_id_t> finite_victim;  // 历史满 K 次的候选
+  size_t inf_oldest = std::numeric_limits<size_t>::max();
+  size_t finite_oldest = std::numeric_limits<size_t>::max();
+
+  for (const auto &[fid, node] : node_store_) {
+    if (!node.IsEvictable()) {
+      continue;  // 还有 page guard 持有这一帧，不能动。
+    }
+    const size_t ts = node.EarliestTimestamp();
+    if (!node.HasFullHistory()) {
+      if (ts < inf_oldest) {
+        inf_oldest = ts;
+        inf_victim = fid;
+      }
+    } else {
+      if (ts < finite_oldest) {
+        finite_oldest = ts;
+        finite_victim = fid;
+      }
+    }
+  }
+
+  auto victim = inf_victim.has_value() ? inf_victim : finite_victim;
+  if (!victim.has_value()) {
+    return std::nullopt;  // 没有任何可驱逐的帧。
+  }
+
+  // 驱逐成功：连同访问历史一起清掉。下次这个帧再被装入新页时，
+  // 历史必须从零开始，否则会把上一个页的访问记录算到新页头上。
+  node_store_.erase(*victim);
+  --curr_size_;
+  return victim;
+}
 
 /**
  * TODO(P1): Add implementation
@@ -54,7 +102,18 @@ auto LRUKReplacer::Evict() -> std::optional<frame_id_t> { return std::nullopt; }
  * @param access_type type of access that was received. This parameter is only needed for
  * leaderboard tests.
  */
-void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType access_type) {}
+void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType access_type) {
+  std::scoped_lock lock(latch_);
+  BUSTUB_ASSERT(static_cast<size_t>(frame_id) <= replacer_size_, "RecordAccess: frame id out of range");
+
+  auto it = node_store_.find(frame_id);
+  if (it == node_store_.end()) {
+    // 第一次见到这个帧。注意新建的节点默认 is_evictable_ = false：
+    // 缓冲池刚把页装进来时它是被 pin 住的，随后才会调 SetEvictable。
+    it = node_store_.emplace(frame_id, LRUKNode(frame_id, k_)).first;
+  }
+  it->second.RecordAccess(current_timestamp_++);
+}
 
 /**
  * TODO(P1): Add implementation
@@ -73,7 +132,24 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType
  * @param frame_id id of frame whose 'evictable' status will be modified
  * @param set_evictable whether the given frame is evictable or not
  */
-void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {}
+void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
+  std::scoped_lock lock(latch_);
+  BUSTUB_ASSERT(static_cast<size_t>(frame_id) <= replacer_size_, "SetEvictable: frame id out of range");
+
+  auto it = node_store_.find(frame_id);
+  if (it == node_store_.end()) {
+    return;  // 帧不存在 → 什么都不做（测试末尾专门验证了这一点）。
+  }
+  if (it->second.IsEvictable() == set_evictable) {
+    return;  // 状态未变，不能重复计数。
+  }
+  it->second.SetEvictable(set_evictable);
+  if (set_evictable) {
+    ++curr_size_;
+  } else {
+    --curr_size_;
+  }
+}
 
 /**
  * TODO(P1): Add implementation
@@ -92,7 +168,18 @@ void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {}
  *
  * @param frame_id id of frame to be removed
  */
-void LRUKReplacer::Remove(frame_id_t frame_id) {}
+void LRUKReplacer::Remove(frame_id_t frame_id) {
+  std::scoped_lock lock(latch_);
+
+  auto it = node_store_.find(frame_id);
+  if (it == node_store_.end()) {
+    return;  // 找不到直接返回。
+  }
+  BUSTUB_ASSERT(it->second.IsEvictable(), "LRUKReplacer::Remove called on a non-evictable frame");
+
+  node_store_.erase(it);
+  --curr_size_;
+}
 
 /**
  * TODO(P1): Add implementation
@@ -101,6 +188,9 @@ void LRUKReplacer::Remove(frame_id_t frame_id) {}
  *
  * @return size_t
  */
-auto LRUKReplacer::Size() -> size_t { return 0; }
+auto LRUKReplacer::Size() -> size_t {
+  std::scoped_lock lock(latch_);
+  return curr_size_;
+}
 
 }  // namespace bustub

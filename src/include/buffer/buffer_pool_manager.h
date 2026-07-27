@@ -91,10 +91,16 @@ class FrameHeader {
   /**
    * TODO(P1): You may add any fields or helper functions under here that you think are necessary.
    *
-   * One potential optimization you could make is storing an optional page ID of the page that the `FrameHeader` is
-   * currently storing. This might allow you to skip searching for the corresponding (page ID, frame ID) pair somewhere
-   * else in the buffer pool manager...
+   * ==== P1 STEP 7: 让帧自己记住它装的是哪个页 ====
+   * 淘汰一个帧时我们需要知道两件事：往磁盘的哪个 page_id 回写脏数据，
+   * 以及该从 page_table_ 里删掉哪个键。若不在帧里存 page_id，就只能反向
+   * 遍历整个 page_table_ 去找 frame_id —— 那是 O(帧数) 的线性扫描，
+   * 而且每次缺页都要做一次。
+   *
+   * 用 std::optional 而不是「INVALID_PAGE_ID 哨兵值」，是为了让「这个帧是空的」
+   * 这一状态在类型层面就无法被误当成一个合法页号。
    */
+  std::optional<page_id_t> page_id_{std::nullopt};
 };
 
 /**
@@ -165,11 +171,39 @@ class BufferPoolManager {
   /**
    * TODO(P1): You may add additional private members and helper functions if you find them necessary.
    *
-   * There will likely be a lot of code duplication between the different modes of accessing a page.
-   *
-   * We would recommend implementing a helper function that returns the ID of a frame that is free and has nothing
-   * stored inside of it. Additionally, you may also want to implement a helper function that returns either a shared
-   * pointer to a `FrameHeader` that already has a page's data stored inside of it, or an index to said `FrameHeader`.
+   * ==== P1 STEP 8: 三个私有辅助函数 ====
    */
+
+  /**
+   * @brief 找一个「空的、可以拿来装新页」的帧。
+   *
+   * 优先从 free_frames_ 取；取不到就让 replacer_ 挑一个受害者淘汰：
+   * 脏页回写磁盘 → 从 page_table_ 摘除 → 清零帧内容。
+   *
+   * @return 可用的 frame id；若所有帧都被 pin 住（缓冲池耗尽）则返回 std::nullopt。
+   * @note 调用方必须已持有 *bpm_latch_。
+   */
+  auto AllocateFrame() -> std::optional<frame_id_t>;
+
+  /**
+   * @brief 把 page_id 对应的页装入内存并 pin 住，返回承载它的帧。
+   *
+   * 这是 CheckedReadPage / CheckedWritePage 共用的全部簿记逻辑。两者的唯一区别
+   * 只是最后包装成读锁还是写锁的 guard，所以这里把公共部分抽出来。
+   *
+   * @return 帧指针；缓冲池耗尽时返回 nullptr。
+   * @note 本函数自己取 *bpm_latch_，返回时已释放——绝不能在持有 bpm 锁的状态下
+   *       再去抢页面的读写锁，否则就是 DeadlockTest 要抓的那种死锁。
+   */
+  auto FetchFrame(page_id_t page_id, AccessType access_type) -> std::shared_ptr<FrameHeader>;
+
+  /**
+   * @brief 向磁盘调度器提交一次同步 I/O，并阻塞等待其完成。
+   *
+   * @param is_write true 表示写出，false 表示读入。
+   * @param page_id  目标页号。
+   * @param data     内存缓冲区（长度必须是 BUSTUB_PAGE_SIZE）。
+   */
+  void SchedulePageIo(bool is_write, page_id_t page_id, char *data);
 };
 }  // namespace bustub
