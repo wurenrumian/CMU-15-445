@@ -247,3 +247,7 @@ docs/dev
 
 # LLM Stuff
 .aider*
+
+# 本地测试产物
+test.bustub
+test.log
