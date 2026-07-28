@@ -326,11 +326,28 @@ b_plus_tree_concurrent_test          6 tests  PASSED
   └─ MixTest2     ( 1709 ms)
 ```
 
-**合计 18 个测试全部通过。** `make format`、`make check-lint` 通过。
+**B+ 树合计 18 个测试全部通过。**
+
+可扩展哈希（第 7 节，评分范围外）：
+
+```
+extendible_htable_page_test          2 tests  PASSED
+  ├─ BucketPageSampleTest            ← 桶页的增删查 + 满/空判定
+  └─ HeaderDirectoryPageSampleTest   ← 目录翻倍/收缩，锁死了 IncrGlobalDepth 必须复制高半区
+
+extendible_htable_test               2 / 3
+  ├─ InsertTest1               ✗  ← 测试本身坏了，见 7.4
+  ├─ InsertTest2               PASSED
+  └─ RemoveTest1               PASSED
+
+extendible_htable_concurrent_test    6 tests  PASSED
+```
+
+`make format`、`make check-lint` 通过。
 
 ---
 
-## 7. 关于可扩展哈希表
+## 7. 可扩展哈希表
 
 **已实现**（虽然它是 F2023 遗留、不在 F2025 评分范围内）。
 10 / 11 个测试通过；**剩下那一个测试本身有问题**，证据见 7.4。
@@ -441,3 +458,16 @@ B+ 树的复杂度全部来自一个约束：**节点必须是定长磁盘页**�
 而 F2025 的墓碑机制则回答了另一个问题：
 **既然结构调整这么贵，能不能少做几次？** 答案是「先记账，攒够了再清算」——
 和 LSM-Tree 的 delete marker、PostgreSQL 的 dead tuple + VACUUM 是同一个思想。
+
+把可扩展哈希也写一遍之后，最大的收获是看清了一件事：
+**这两种索引的差别，全部源于"有没有保留顺序"这一个选择。**
+
+哈希放弃了顺序，于是换来层数恒定（3 次页访问，与数据量无关）、
+结构调整不向上传播；代价是范围查询和 `ORDER BY` **完全做不了**——
+P3 优化器里"索引即物化的排序结果"那条捷径对它不成立。
+
+B+ 树保留了顺序，于是必须维持半满、必须分裂合并向上传播、必须螃蟹锁，
+换来的是范围扫描、有序遍历，以及最坏情况的复杂度保证。
+
+真实数据库的默认索引几乎总是 B+ 树，不是因为它更快，
+而是因为**它没有"某类查询彻底做不了"这种断崖**。

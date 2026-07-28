@@ -185,7 +185,7 @@ for (const auto &[table_oid, rids] : txn->GetWriteSets()) {
 > 排查半天才发现是 `cmake --build .` 没有重新链接 `txn_scan_test` 这个目标，
 > 跑的是旧二进制。改完 MVCC 相关代码后，务必显式重建对应的测试目标。
 
-集成后 **P3 的 20 个 SQL 测试全部无回归**：P3 场景下元组的 `ts_` 都是 0、
+集成后 **P3 的 SQL 测试全部无回归**：P3 场景下元组的 `ts_` 都是 0、
 事务的 `read_ts` 也是 0，走情况 ②，行为与原来完全一致。
 
 ---
@@ -356,7 +356,7 @@ txn_abort_serializable_test     4 tests  PASSED
 ```
 
 **合计 25 个测试全部通过。** `make format`、`make check-lint` 通过；
-**P0–P3 全部无回归**（P3 的 20 个 SQL 测试重跑仍 20/20）。
+**P0–P3 全部无回归**（P3 的 SQL 测试重跑仍全绿）。
 
 ---
 

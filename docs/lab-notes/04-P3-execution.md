@@ -75,10 +75,11 @@ auto Next(std::vector<Tuple> *tuple_batch, std::vector<RID> *rid_batch, size_t b
 
 这是理解执行引擎最有用的一把尺子。
 
-| 类型 | 算子 | 特征 |
-|---|---|---|
-| **流式**（pipelined） | SeqScan、IndexScan、Filter、Projection、Limit、NestedLoopJoin | 拿到一条就能吐一条，内存 O(1) |
-| **阻塞**（pipeline breaker） | Aggregation、Sort、TopN、HashJoin 的建表侧、Insert/Delete/Update | 必须先看完**全部**输入才能产出第一条 |
+| 类型 | 算子 | 内存 | 特征 |
+|---|---|---|---|
+| **流式**（pipelined） | SeqScan、IndexScan、Filter、Projection、Limit、NestedLoopJoin | O(1) | 拿到一条就能吐一条 |
+| **阻塞**（pipeline breaker） | Aggregation、Sort、TopN、HashJoin 的建表侧、Insert/Delete/Update | O(分组数) 或 O(N) | 必须先看完**全部**输入才能产出第一条 |
+| **彻底阻塞** | WindowFunction | **O(行数)** | 输入输出行数相等，且每行的值可能依赖它后面的行 |
 
 阻塞算子的共同实现套路：**在 `Init()` 里把子算子消费干净并物化结果，
 `Next()` 只负责把结果搬出去**。因为：
@@ -86,6 +87,11 @@ auto Next(std::vector<Tuple> *tuple_batch, std::vector<RID> *rid_batch, size_t b
 - 聚合：下一条元组随时可能属于某个已有分组并改变它的 SUM/MAX；
 - 排序：最小的那条可能是最后读到的；
 - 写算子：必须先全部写完才知道「影响了几行」。
+
+第三类值得单列：聚合虽然阻塞，但它把 N 行**压缩**成 M 行，内存只需 O(分组数)；
+窗口函数保持 N 行不变、只多加几列，于是必须把**每一行**都留在内存里
+（`SUM(x) OVER ()` 要看完全表才知道第一行该填什么）。这是真实系统里
+窗口函数常常成为内存瓶颈的原因，详见第 7 节。
 
 流式算子里，`Limit` 最能体现火山模型的优雅：够了就直接 `return false`，
 根本不去问子算子，于是下面的全表扫描自然停在半路（STEP 3）。
@@ -370,7 +376,7 @@ select v, sum(v) over (order by v) from t;
 
 ---
 
-## 7. 一句话小结
+## 8. 一句话小结
 
 执行引擎的全部设计都围绕一个问题展开：
 **数据比内存大，那就一次只碰一小块。**
