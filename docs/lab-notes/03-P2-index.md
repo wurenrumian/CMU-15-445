@@ -329,12 +329,24 @@ b_plus_tree_concurrent_test          6 tests  PASSED
 
 ## 7. 关于可扩展哈希表
 
-`src/container/disk/hash/` 与 `src/storage/page/extendible_htable_*` 在 F2025 骨架里
-是**没有 `TODO(P2)` 标记的空桩**（返回 `0` / `false`），而 B+ 树部分用的是
-`UNIMPLEMENTED("TODO(P2): Add implementation.")`。对应的测试也全部带 `DISABLED_` 前缀。
+**未实现。** 先把证据摆清楚——我最初的判断依据有一半是错的，后来复查才发现：
 
-由此判断它属于 F2023 版 P2 的遗留代码，本学期 P2 的评分范围只有 B+ 树。
-如需补做，工作量约为：三个页类（header / directory / bucket）+ 目录分裂合并逻辑。
+| 文件 | 状态 |
+|---|---|
+| `src/container/disk/hash/disk_extendible_hash_table.cpp` | **有 3 处 `TODO(P2): Add implementation`** |
+| `src/storage/page/extendible_htable_{header,directory,bucket}_page.cpp` | 空桩，`throw NotImplementedException`，**无** TODO 标记 |
+
+所以"没有 `TODO(P2)` 标记"这个说法只对页类成立，对哈希表主体不成立。
+判断它非本学期评分范围，真正站得住的理由只剩两条：
+
+1. 全部相关测试（`ExtendibleHTableTest`、`ExtendibleHTableConcurrentTest`、
+   `HashTablePageTest`）都带 `DISABLED_` 前缀——**但这一条证据很弱**，
+   因为 P1/P2 的正式测试同样带 `DISABLED_` 前缀；
+2. F2025 的 P2 讲义与 Gradescope 提交项只列了 B+ 树。
+
+坦白说，如果只看仓库本身，**证据不足以完全排除它**。它更可能是 F2023 版 P2 的遗留。
+如需补做，工作量约为：三个页类（header / directory / bucket）+ 目录分裂合并逻辑，
+`extendible_htable_test --gtest_also_run_disabled_tests` 有 3 个用例可作验收。
 
 ---
 
