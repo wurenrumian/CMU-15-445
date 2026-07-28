@@ -101,7 +101,7 @@
 | **28** | 插入 —— 桶满了就分裂，而不是重建整张表 | `src/container/disk/hash/disk_extendible_hash_table.cpp` |
 | **29** | 删除 —— 合并空桶，必要时收缩目录 | `src/container/disk/hash/disk_extendible_hash_table.cpp` |
 
-> STEP 20–29 是**可扩展哈希表**（F2023 遗留，额外补做），STEP 0–19 是 B+ 树。
+> STEP 0–19 是 B+ 树，STEP 20–29 是**可扩展哈希表**（F2023 遗留，额外补做）。
 
 ## P3 · 查询执行引擎
 
@@ -133,7 +133,12 @@
 | **23** | 内存排序 | `src/execution/sort_executor.cpp` |
 | **24** | 为什么 TopN 不是「排序 + 取前 N」 | `src/execution/topn_executor.cpp` |
 | **25** | 识别 Limit(Sort(...)) 这个模式 | `src/optimizer/sort_limit_as_topn.cpp` |
+| **26** | 窗口函数为什么必须是「阻塞算子」中最彻底的那一类 | `src/include/execution/executors/window_function_executor.h` |
+| **27** | 窗口函数和聚合的本质区别 | `src/execution/window_function_executor.cpp` |
+| **28** | 分区 + 排序 + 累计，以及「同伴行」这个坑 | `src/execution/window_function_executor.cpp` |
 
+> STEP 1–25 是 F2025 的评分范围，STEP 26–28 是**窗口函数**（额外补做）。
+>
 > **编号里为什么缺 STEP 6**：原本是 `UpdateExecutor` 的「删除 + 插入」写法，
 > 被 P4 的 MVCC 整个推翻了（版本链必须锚在同一个 RID 上），代码换成了
 > P4 STEP 15 / 20 / 21。缺口是**故意保留**的——它标记着一处"P3 的正确答案

@@ -5,14 +5,13 @@
 - `src/include/storage/page/intermediate_result_page.h`（外排的中间结果页）
 - `src/optimizer/seqscan_as_indexscan.cpp`、`nlj_as_hash_join.cpp`、`sort_limit_as_topn.cpp`（优化器规则）
 
-**测试**：`test/sql/p3.00-*.slt` ~ `p3.19-*.slt`（20 个评分用例），全部通过。
+**测试**：`test/sql/p3.00-*.slt` ~ `p3.20-*.slt`（21 个），全部通过。
 
 ```bash
-# 注意：不要偷懒写成 p3.*.slt —— 那个通配符会多匹配到 6 个文件：
-#   p3.20-window-function.slt   窗口函数，非评分范围（见第 6 节）
+# 注意：不要偷懒写成 p3.*.slt —— 那个通配符会多匹配到 5 个 leaderboard 文件：
 #   p3.leaderboard-q{1,2,3}*    可选的性能排行榜基准，数据量极大，要跑很久
 # 我就因为这个以为"测试卡死了"，实际只是在跑 leaderboard。
-for f in ../test/sql/p3.[01]?-*.slt; do ./bin/bustub-sqllogictest "$f" || echo "FAIL $f"; done
+for f in ../test/sql/p3.[012]?-*.slt; do ./bin/bustub-sqllogictest "$f" || echo "FAIL $f"; done
 ```
 
 ---
@@ -295,19 +294,79 @@ p3.06-empty-table          PASS      p3.16-sort-limit           PASS
 p3.07-simple-agg           PASS      p3.17-topn                 PASS
 p3.08-group-agg-1          PASS      p3.18-integration-1        PASS
 p3.09-group-agg-2          PASS      p3.19-integration-2        PASS
+                                     p3.20-window-function      PASS
 ```
 
-**20 / 20 通过。** 仓库内 `TODO(P3)` 标记已全部清零。
+**21 / 21 通过。** 仓库内 `TODO(P3)` 标记已全部清零。
 `make format`、`make check-lint` 通过。
 
-### 未实现：窗口函数（非评分范围）
+---
 
-`p3.20-window-function.slt` 依赖 `WindowFunctionExecutor`，
-该文件用的是 `throw NotImplementedException(...)` 而**没有 `TODO(P3)` 标记**
-（与可扩展哈希表、`TopNPerGroupExecutor` 情况相同）。
-其余带 `TODO(P3)` 标记的任务已全部完成。若需要补做，
-可在 `src/execution/window_function_executor.cpp` 实现
-`RANK / ROW_NUMBER / 聚合窗口` 三类语义。
+## 7. 窗口函数（STEP 26-28，额外补做）
+
+`p3.20-window-function.slt` **已通过**，21 个 SQL 测试全绿。
+
+### 7.1 和聚合的本质区别
+
+```sql
+SELECT v1, SUM(v1) OVER () FROM t   -- 6 行进，6 行出
+SELECT SUM(v1) FROM t               -- 6 行进，1 行出
+```
+
+聚合把 N 行**压缩**成 M 行（M = 分组数）；窗口函数保持 N 行不变，只是**多加几列**。
+
+这个差别决定了它是**最彻底的阻塞算子**。聚合虽然也阻塞，但内存只需 O(分组数)；
+窗口函数要为每一条输入行产出一条输出行，而某一行的值可能依赖它**后面**的行
+（`SUM(x) OVER ()` 得看完全表才知道总和），所以必须把全部元组物化，内存是 O(行数)。
+这也是真实系统里窗口函数常常成为内存瓶颈的原因。
+
+### 7.2 算法：分区 → 排序 → 累计
+
+1. 按 `PARTITION BY` 分组，分区之间完全独立；
+2. 分区内按**该函数自己的** `ORDER BY` 排序；
+3. 顺序扫一遍累计出每行的值。
+
+第 2 步的"自己的"很关键——不同窗口函数可以有不同的 `ORDER BY`：
+
+```sql
+select sum(v2) over (partition by v1 order by v2), sum(v2) over (order by v2) from t2;
+```
+
+所以不能全局排一次了事，每个窗口函数都要在分区内按自己的键再排一遍。
+（全局那次排序另有用途：决定**输出行的顺序**。）
+
+### 7.3 最容易写错的地方：同伴行（peer）
+
+SQL 标准的默认窗口帧是 **RANGE**（按值）而不是 **ROWS**（按物理行）：
+
+> 排序键相同的行必须拿到**同一个**窗口值。
+
+```sql
+-- t = {1, 2, 2, 3}
+select v, sum(v) over (order by v) from t;
+--  1 -> 1
+--  2 -> 5   ← 两个 2 互相包含：1+2+2
+--  2 -> 5
+--  3 -> 8
+```
+
+逐行累加会给出 `1, 3, 5, 8` —— 两个 `2` 拿到不同的值，错。
+正确做法是先把一整段同伴行**全部**折进累加器，再统一回填。
+
+`RANK` 是同一件事的另一种表现：同伴行共享名次，下一个名次**跳号**
+（`1,1,3` 而不是 `1,1,2`）。所以这两件事在实现上是同一段代码。
+
+> **注意**：`p3.20` 只用 `rank()` 测了重复键，聚合类窗口函数的同伴行语义
+> **没有被测试覆盖**。也就是说逐行累加的写法同样能通过 p3.20。
+> 这里选了符合 SQL 标准的 RANGE 语义，并单独写了一条用例验证
+> （就是上面那个 `{1,2,2,3}` 的例子）。
+
+### 7.4 未实现：TopNPerGroup
+
+`TopNPerGroupExecutor` 仍是空桩，但它**从 SQL 根本走不到**——
+`src/optimizer/` 里没有任何规则会生成 `TopNPerGroupPlanNode`，
+只有 `executor_factory.cpp` 里留了一个永远不会命中的 `case`。
+实现它等于写死代码，因此没做。
 
 ---
 
