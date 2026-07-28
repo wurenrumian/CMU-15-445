@@ -1,17 +1,20 @@
-# P2 · 索引：带墓碑的 B+ 树
+# P2 · 索引：带墓碑的 B+ 树与可扩展哈希
 
-> **状态：B+ 树全部完成，18 个测试（含 6 个并发测试）通过。**
-> 第 1–4 节是从测试用例反推出的**精确行为规格**（骨架文档未给出），第 5 节起是实现记录。
-> 同目录下的可扩展哈希表判断为非本学期评分范围，未实现，理由见第 7 节。
+> **状态：B+ 树 18/18 通过；可扩展哈希 10/11 通过（剩下那一个是坏测试，见 7.4）。**
+> 第 1–4 节是从测试用例反推出的**精确行为规格**（骨架文档未给出），
+> 第 5 节起是 B+ 树的实现记录，第 7 节是可扩展哈希。
 
 **涉及文件**
 - `src/storage/page/b_plus_tree_page.cpp`（公共页头）
 - `src/storage/page/b_plus_tree_leaf_page.cpp` / `b_plus_tree_internal_page.cpp`
 - `src/storage/index/b_plus_tree.cpp`（增删查主逻辑）
 - `src/storage/index/index_iterator.cpp` + `src/include/storage/index/index_iterator.h`
+- `src/storage/page/extendible_htable_{header,directory,bucket}_page.cpp`
+- `src/container/disk/hash/disk_extendible_hash_table.cpp`
 
 **测试**：`b_plus_tree_insert_test`、`b_plus_tree_delete_test`、`b_plus_tree_tombstone_test`、
-`b_plus_tree_concurrent_test`、`b_plus_tree_sequential_scale_test`
+`b_plus_tree_concurrent_test`、`b_plus_tree_sequential_scale_test`、
+`extendible_htable_page_test`、`extendible_htable_test`、`extendible_htable_concurrent_test`
 
 ---
 
@@ -329,24 +332,103 @@ b_plus_tree_concurrent_test          6 tests  PASSED
 
 ## 7. 关于可扩展哈希表
 
-**未实现。** 先把证据摆清楚——我最初的判断依据有一半是错的，后来复查才发现：
+**已实现**（虽然它是 F2023 遗留、不在 F2025 评分范围内）。
+10 / 11 个测试通过；**剩下那一个测试本身有问题**，证据见 7.4。
 
-| 文件 | 状态 |
-|---|---|
-| `src/container/disk/hash/disk_extendible_hash_table.cpp` | **有 3 处 `TODO(P2): Add implementation`** |
-| `src/storage/page/extendible_htable_{header,directory,bucket}_page.cpp` | 空桩，`throw NotImplementedException`，**无** TODO 标记 |
+涉及文件：`extendible_htable_{header,directory,bucket}_page.cpp`、
+`disk_extendible_hash_table.cpp`，对应 STEP 20–29。
 
-所以"没有 `TODO(P2)` 标记"这个说法只对页类成立，对哈希表主体不成立。
-判断它非本学期评分范围，真正站得住的理由只剩两条：
+### 7.1 三层结构与两个深度
 
-1. 全部相关测试（`ExtendibleHTableTest`、`ExtendibleHTableConcurrentTest`、
-   `HashTablePageTest`）都带 `DISABLED_` 前缀——**但这一条证据很弱**，
-   因为 P1/P2 的正式测试同样带 `DISABLED_` 前缀；
-2. F2025 的 P2 讲义与 Gradescope 提交项只列了 B+ 树。
+```
+   header (静态, 取哈希高 max_depth 位)
+      │  最多 2^9 个槽位
+      ▼
+   directory (动态, 取哈希低 global_depth 位)
+      │  2^GD 个槽位，可翻倍 / 减半
+      ▼
+   bucket (无序紧凑数组)
+```
 
-坦白说，如果只看仓库本身，**证据不足以完全排除它**。它更可能是 F2023 版 P2 的遗留。
-如需补做，工作量约为：三个页类（header / directory / bucket）+ 目录分裂合并逻辑，
-`extendible_htable_test --gtest_also_run_disabled_tests` 有 3 个用例可作验收。
+**为什么要三层**：目录数组按 2 的幂增长，而一个 4KB 页最多装 512 个 `page_id`
+（2048 字节的 `bucket_page_ids_` 加 512 字节的 `local_depths_` 已占去大半页）。
+单个目录页只能管 2^9 个桶，header 再往上分一层，总容量提到 2^18。
+
+**核心概念只有一个**——全局深度 GD 与局部深度 LD 的差：
+
+> LD 比 GD 小的桶，会被 **2^(GD−LD) 个目录槽位同时指向**。
+
+这个"多对一"就是可扩展哈希优于静态哈希的全部理由：
+**桶满了不必重建整张表，只分裂那一个桶。** 分裂时该桶 LD 加一，
+原本指向它的那批槽位一分为二，其它桶完全不受影响。
+只有当 LD 已经等于 GD（没有富余槽位可分）时，才需要把目录整体翻倍。
+
+### 7.2 三个关键实现细节
+
+**① header 取高位、directory 取低位**（STEP 21）
+
+两层取同一个 32 位哈希的**两端**，因此互不干扰。若两层都取低位，
+目录分裂会改变低位的含义，键就"跑到隔壁目录"去了——而 header 层没有迁移机制，
+那些键永久找不回来。
+
+`max_depth == 0` 必须提前返回 0：`hash >> 32` 是**未定义行为**，
+x86 会把移位量按 32 取模从而原样返回 `hash`，随后越界访问。
+
+**② 目录翻倍是"原样复制一份接在后面"**（STEP 24）
+
+新槽位 `i + 2^GD` 与旧槽位 `i` 指向同一个桶，局部深度照抄。
+所以**翻倍本身不搬任何数据**，它只是把分裂的余地腾出来。
+
+这也解释了为什么目录取**低**位而非高位：翻倍后一个键落到的槽位要么不变、
+要么变成 `idx + 2^GD`，而这两个槽位指向同一个桶。
+
+**③ 迁移条目必须倒序遍历**（STEP 28）
+
+桶页无序，所以 `RemoveAt` 用**末项填空**做到 O(1) 删除。代价是正序遍历时
+删掉下标 `i` 会把最后一项挪到 `i`，而循环紧接着 `i++` 跳过了它——
+那一条永远不被检查，本该迁走的条目留在老桶里，之后按新低位再也查不到。
+
+### 7.3 与 B+ 树的对照
+
+| | B+ 树 | 可扩展哈希 |
+|---|---|---|
+| 树高 | O(log n)，随数据量变 | **恒为 3** |
+| 等值查找 | O(log n) 次页访问 | O(1) 次页访问 |
+| 范围查询 / ORDER BY | ✅ 叶子链表天然有序 | ❌ **完全做不到** |
+| 结构调整 | 分裂/合并**向上传播**，可能改到根 | 只在同一目录内横向传播，碰不到 header |
+| 最坏情况 | 有保证 | 哈希倾斜时退化 |
+
+"索引即物化的排序结果"这条在 P3 优化器里用到的捷径（`ORDER BY` 改写成索引扫描），
+对哈希索引**完全不成立**。这也是为什么真实数据库的默认索引几乎总是 B+ 树，
+哈希索引只在明确知道"只做等值查找"时才用。
+
+### 7.4 `InsertTest1` 是个坏测试（不是实现的问题）
+
+```cpp
+// header_max_depth=0, directory_max_depth=2, bucket_max_size=2
+DiskExtendibleHashTable<int, int, IntComparator> ht(..., 0, 2, 2);
+for (int i = 0; i < 8; i++) { ASSERT_TRUE(ht.Insert(i, i)); }   // 断言 8 个全部插入成功
+ASSERT_FALSE(ht.Insert(8, 8));                                  // 第 9 个才该失败
+```
+
+配置给出的总容量恰好是 4 个桶 × 2 = 8，所以这个断言隐含要求
+**键 0–7 在低 2 位上恰好 2/2/2/2 均匀分布**。实测并非如此：
+
+| 低 2 位 | 落进来的键 | 数量 |
+|---|---|---|
+| `00` | 0, 2, 4, 6 | **4** ← 超过桶容量 2 |
+| `01` | — | 0 |
+| `10` | 1 | 1 |
+| `11` | 3, 5, 7 | 3 |
+
+于是插入到 **key=4**（低 2 位为 `00` 的第 3 个键）时必然失败——实测失败点正是这里。
+
+这不是实现能绕过的：目录深度上限 2 ⇒ 寻址只能用低 2 位 ⇒ 这 4 个键必须挤进同一个桶。
+**任何正确实现都过不了这个断言。** 该测试大概是当年在某个不同的
+`HashFunction<int>` 下写死的，随骨架演进而失效，又因为一直带着 `DISABLED_`
+前缀无人运行，就这么留下来了。
+
+保留原样、不去改测试来"凑通过"——记下证据比刷一个绿勾有意义。
 
 ---
 

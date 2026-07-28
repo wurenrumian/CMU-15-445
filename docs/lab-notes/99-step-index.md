@@ -56,7 +56,7 @@
 | **14** | 释放顺序 | `src/storage/page/page_guard.cpp` |
 | **15** | 何时置脏位 | `src/storage/page/page_guard.cpp` |
 
-## P2 · B+ 树索引
+## P2 · B+ 树索引与可扩展哈希
 
 配套教学报告：[03-P2-index.md](./03-P2-index.md)
 
@@ -90,6 +90,18 @@
 | **17** | 乐观加锁 | `src/storage/index/b_plus_tree.cpp` |
 | **18** | 根节点的「安全」判据和别人不一样 | `src/storage/index/b_plus_tree.cpp` |
 | **19** | 树彻底变空 | `src/storage/index/b_plus_tree.cpp` |
+| **20** | 三层结构的最顶层 | `src/storage/page/extendible_htable_header_page.cpp` |
+| **21** | header 取**高**位，directory 取**低**位 | `src/storage/page/extendible_htable_header_page.cpp` |
+| **22** | 全局深度与局部深度 | `src/storage/page/extendible_htable_directory_page.cpp` |
+| **23** | 「分裂镜像」是唯一有资格与我合并的伙伴 | `src/storage/page/extendible_htable_directory_page.cpp` |
+| **24** | 目录翻倍 = 把整个数组原样复制一份接在后面 | `src/storage/page/extendible_htable_directory_page.cpp` |
+| **25** | 桶页是「无序紧凑数组」，和 B+ 树叶子完全相反 | `src/storage/page/extendible_htable_bucket_page.cpp` |
+| **26** | 建表只造一个 header 页 | `src/container/disk/hash/disk_extendible_hash_table.cpp` |
+| **27** | 查询路径 —— 三次页访问，全部只用读锁 | `src/container/disk/hash/disk_extendible_hash_table.cpp` |
+| **28** | 插入 —— 桶满了就分裂，而不是重建整张表 | `src/container/disk/hash/disk_extendible_hash_table.cpp` |
+| **29** | 删除 —— 合并空桶，必要时收缩目录 | `src/container/disk/hash/disk_extendible_hash_table.cpp` |
+
+> STEP 20–29 是**可扩展哈希表**（F2023 遗留，额外补做），STEP 0–19 是 B+ 树。
 
 ## P3 · 查询执行引擎
 

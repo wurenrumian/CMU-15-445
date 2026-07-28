@@ -45,7 +45,7 @@ BusTub 是一个"教学用但五脏俱全"的磁盘型关系数据库。五个 P
 |---|---|---|---|---|
 | P0 | C++ / 并发热身 | 读写锁保护的并发跳表 | ✅ 9/9 | [01-P0-跳表](./01-P0-skiplist.md) |
 | P1 | 缓冲池管理器 | ARC & LRU-K 替换器、磁盘调度器、RAII 页守卫、缓冲池 | ✅ 14/14 | [02-P1-缓冲池](./02-P1-buffer-pool.md) |
-| P2 | 索引 | 带墓碑的 B+ 树（含并发） | ✅ 18/18 | [03-P2-索引](./03-P2-index.md) |
+| P2 | 索引 | 带墓碑的 B+ 树（含并发）+ 可扩展哈希表 | ✅ 18/18 · 哈希 10/11 | [03-P2-索引](./03-P2-index.md) |
 | P3 | 查询执行 | 12 个算子 + 3 条优化器规则 | ✅ 20/20 | [04-P3-执行引擎](./04-P3-execution.md) |
 | P4 | 并发控制 | MVCC 全套：时间戳、水位线、版本链、写冲突、主键约束、GC、可串行化 | ✅ 25/25 | [05-P4-并发控制](./05-P4-concurrency.md) |
 
@@ -56,34 +56,45 @@ P1 的 14 个用例包含 `arc_replacer_performance_test`（1 个），它测的
 
 上表是 **F2025 版 P0–P4 的评分范围**，已 100% 完成。
 
-### 仓库里还有哪些没做的
+### 额外做的：可扩展哈希表
 
-BusTub 是逐年演进的，骨架里堆积了往届的实验代码。它们**不属于 F2025 的评分范围**，
-但确实还是空桩。为免误导，把全部清单和证据强度列在这里：
+`extendible_htable_*` + `disk_extendible_hash_table` 是 F2023 版 P2 的内容，
+不在 F2025 评分范围内，但它和 B+ 树正好构成"有序索引 vs 哈希索引"的对照，
+所以补做了：**10 / 11 通过**。
 
-| 未实现项 | 归属 | 测试状态 | 位置 |
-|---|---|---|---|
-| **Trie / TrieStore** | F2023 P0 | ❌ 17 个用例失败（**未** DISABLED） | `src/primer/trie.cpp`、`trie_store.cpp` |
-| **ORSet**（CRDT） | F2023 P0 | ❌ 9 个用例失败（**未** DISABLED） | `src/primer/orset.cpp` |
-| **CountMinSketch** | F2024 P0 | ❌ 13 个用例失败（**未** DISABLED） | `src/primer/count_min_sketch.cpp` |
-| **HyperLogLog** | F2024 P0 | ❌ 失败（带 DISABLED 前缀） | `src/primer/hyperloglog*.cpp` |
-| **可扩展哈希表** | F2023 P2 | ❌ 3 个用例失败（带 DISABLED） | `src/container/disk/hash/`、`storage/page/extendible_htable_*` |
-| **窗口函数 / TopNPerGroup** | P3 选做 | ❌ `p3.20-window-function.slt` | `src/execution/window_function_executor.cpp` 等 |
+剩下那一个（`InsertTest1`）**是测试本身有问题，不是实现的问题**——
+它的断言隐含要求 8 个键在低 2 位上恰好均匀分布成 2/2/2/2，
+而实测是 4/0/1/3，任何正确实现都过不了。证据见
+[03-P2 第 7.4 节](./03-P2-index.md)。没有去改测试凑绿勾。
 
-**一处需要更正的判断**：我最初用"有没有 `TODO(Pn)` 标记"来区分是否评分任务，
-并据此断言可扩展哈希表"没有 TODO 标记"。复查发现**这不准确**——
-`disk_extendible_hash_table.cpp` 里有 3 处 `TODO(P2): Add implementation`，
-只有三个页类文件确实没标记。详见 [03-P2 第 7 节](./03-P2-index.md)。
+### 已从仓库移除的往届热身题
+
+BusTub 逐年演进，骨架里堆着几届换掉的 C++ 练习。它们既不属于 F2025 评分范围，
+又是会让 `ctest` 报错的空桩，留着只会误导，因此**已删除**：
+
+| 移除项 | 归属 | 删除前状态 |
+|---|---|---|
+| Trie / TrieStore | F2023 P0 | 17 个用例失败 |
+| ORSet（CRDT） | F2023 P0 | 9 个用例失败 |
+| CountMinSketch | F2024 P0 | 13 个用例失败 |
+| HyperLogLog | F2024 P0 | 失败（带 DISABLED） |
+
+需要的话 `git log` 里都能找回来。
+
+仍未实现的只剩**窗口函数 / TopNPerGroup**（`p3.20-window-function.slt`），
+属 P3 选做。
+
+### 一处需要更正的判断
+
+我最初用"有没有 `TODO(Pn)` 标记"来区分是否评分任务，并据此断言可扩展哈希表
+"没有 TODO 标记"。复查发现**这不准确**——`disk_extendible_hash_table.cpp` 里
+有 3 处 `TODO(P2): Add implementation`，只有三个页类文件确实没标记。
 
 同样地，"测试带 `DISABLED_` 前缀 ⇒ 非评分范围"这条推理也**不成立**——
 P1、P2 的正式评分测试同样带 `DISABLED_` 前缀，这是 BusTub 的惯例，
 目的是防止学生把测试直接跑通就当作完成。
 
 真正可靠的依据只有一条：**F2025 各 Project 的讲义与 Gradescope 提交项**。
-按那个口径，P0 是跳表、P1 缓冲池、P2 B+ 树、P3 执行引擎、P4 MVCC —— 均已完成。
-
-> ⚠️ 因此 `make check-tests` 或直接跑 `ctest` **会有失败项**，
-> 那些全部来自上表的往届遗留代码，与本仓库实现的 86 个测试无关。
 
 ### 一条贯穿全实验的主线：延迟回收
 
@@ -112,7 +123,7 @@ P1、P2 的正式评分测试同样带 `DISABLED_` 前缀，这是 BusTub 的惯
 - `---- STEP k.m: 标题 ----` —— 步骤内部的子阶段。
 - 普通注释只解释**为什么**，不复述代码在做什么。
 
-全部 91 个主标记（另有 16 个子标记）的清单见
+全部 101 个主标记（另有 16 个子标记）的清单见
 **[附录 · STEP 标记总索引](./99-step-index.md)**，
 可以从"我想看某个概念"直接跳到对应文件。按编号顺序读下来，
 本身就是一条从零搭出数据库的路径。
