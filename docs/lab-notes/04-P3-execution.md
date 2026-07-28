@@ -5,7 +5,15 @@
 - `src/include/storage/page/intermediate_result_page.h`（外排的中间结果页）
 - `src/optimizer/seqscan_as_indexscan.cpp`、`nlj_as_hash_join.cpp`、`sort_limit_as_topn.cpp`（优化器规则）
 
-**测试**：`test/sql/p3.*.slt`（20 个），全部通过。
+**测试**：`test/sql/p3.00-*.slt` ~ `p3.19-*.slt`（20 个评分用例），全部通过。
+
+```bash
+# 注意：不要偷懒写成 p3.*.slt —— 那个通配符会多匹配到 6 个文件：
+#   p3.20-window-function.slt   窗口函数，非评分范围（见第 6 节）
+#   p3.leaderboard-q{1,2,3}*    可选的性能排行榜基准，数据量极大，要跑很久
+# 我就因为这个以为"测试卡死了"，实际只是在跑 leaderboard。
+for f in ../test/sql/p3.[01]?-*.slt; do ./bin/bustub-sqllogictest "$f" || echo "FAIL $f"; done
+```
 
 ---
 
@@ -97,7 +105,7 @@ auto Next(std::vector<Tuple> *tuple_batch, std::vector<RID> *rid_batch, size_t b
   和 P2 叶子页的墓碑是同一个思想。
 - 支持谓词下推（`plan_->filter_predicate_`）。
 
-### 4.2 Insert / Delete / Update（STEP 4-6）
+### 4.2 Insert / Delete / Update（STEP 4-5）
 
 三者共享同一套骨架：阻塞式消费子算子 → 改表堆 → **同步维护所有索引** → 输出一行行数。
 
@@ -109,7 +117,7 @@ auto Next(std::vector<Tuple> *tuple_batch, std::vector<RID> *rid_batch, size_t b
 | DELETE | `UpdateTupleMeta(is_deleted=true)` | 每个索引 `DeleteEntry`（**必须真删**，索引没有墓碑机制） |
 | UPDATE | 删旧 + 插新 | 先 `DeleteEntry(旧键)` 再 `InsertEntry(新键)` |
 
-**UPDATE 为什么是「删除+插入」而不是原地改**（STEP 6）：
+**UPDATE 为什么是「删除+插入」而不是原地改**：
 - 新元组长度可能变（变长字段），原地覆盖会破坏页内布局；
 - P4 的 MVCC 要求旧版本留在原地供老事务读取。
 

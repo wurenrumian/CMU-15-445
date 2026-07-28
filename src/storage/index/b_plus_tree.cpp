@@ -259,6 +259,16 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
  */
 FULL_INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value) -> bool {
+  // ==== P2 STEP 12: 插入的五条分支 ====
+  // 插入看起来只有一件事，实际要分五种情况处理，难度是递增的：
+  //   12.0 乐观路径 —— 赌「只改叶子」，赌中就只加一把写锁；
+  //   12.1 空树     —— 连根都还不存在，得先造一个；
+  //   12.2 键已存在 —— 活条目返回 false，墓碑则「复活」（F2025 特有）；
+  //   12.3 有空位   —— 唯一的平凡情况；
+  //   12.4 叶子已满 —— 分裂，并可能向上层层传播。
+  // 这个顺序不是随意排的：从「最常见且最便宜」到「最罕见且最贵」，
+  // 让绝大多数插入在第一个分支就返回。
+  //
   // ---- STEP 12.0: 先赌一把「只影响叶子」----
   // OptimisticInsertTest 会精确统计：往一个还有空位的叶子里插一条，
   // 必须只发生 **1 次** WritePage。若沿途全部加写锁，这个数字会是路径长度。
@@ -476,6 +486,16 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key) {
 
 FULL_INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::HandleUnderflow(Context &ctx) {
+  // ==== P2 STEP 15: 下溢的修复 —— 借用还是合并 ====
+  // 一个节点掉到 GetMinSize() 以下就不再合法，必须从邻居那里补货。两条路：
+  //   借用（redistribute）—— 邻居富裕，匀一条过来。**只改一个分隔键，不改结构**，
+  //                          代价低，且到此为止、不会再往上传播。
+  //   合并（coalesce）    —— 邻居也不富裕，两个节点并成一个。**父节点因此少一个孩子**，
+  //                          于是父节点自己可能下溢 → 递归向上。
+  // 判据见规格 F：`left.size + right.size <= max_size` 就合并，否则借用。
+  // 注意这是「能合并就合并」而非「能借用就借用」—— 后者虽然单次更便宜，
+  // 但会让树里长期存在大量半满页，空间利用率下降。TombstoneBorrowTest 锁死了这个选择。
+  //
   // 循环而非递归：下溢可能一层层往上传播，每轮处理一层。
   // 进入循环时，ctx.write_set_.back() 是**已经下溢**的那个节点，
   // 它的前一个元素是其父节点（螃蟹锁保证了父节点的写锁一定还握在手里）。

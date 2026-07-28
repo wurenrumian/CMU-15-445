@@ -56,17 +56,12 @@ namespace bustub {
  */
 
 /**
- *
- * TODO(P1): Add implementation
- *
  * @brief a new ArcReplacer, with lists initialized to be empty and target size to 0
  * @param num_frames the maximum number of frames the ArcReplacer will be required to cache
  */
 ArcReplacer::ArcReplacer(size_t num_frames) : replacer_size_(num_frames) {}
 
 /**
- * TODO(P1): Add implementation
- *
  * @brief Performs the Replace operation as described by the writeup
  * that evicts from either mfu_ or mru_ into its corresponding ghost list
  * according to balancing policy.
@@ -167,8 +162,6 @@ void ArcReplacer::PromoteToMfu(const std::shared_ptr<FrameStatus> &status) {
 }
 
 /**
- * TODO(P1): Add implementation
- *
  * @brief Record access to a frame, adjusting ARC bookkeeping accordingly
  * by bring the accessed page to the front of mfu_ if it exists in any of the lists
  * or the front of mru_ if it does not.
@@ -286,8 +279,6 @@ void ArcReplacer::RecordAccess(frame_id_t frame_id, page_id_t page_id, [[maybe_u
 }
 
 /**
- * TODO(P1): Add implementation
- *
  * @brief Toggle whether a frame is evictable or non-evictable. This function also
  * controls replacer's size. Note that size is equal to number of evictable entries.
  *
@@ -328,8 +319,6 @@ void ArcReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
 }
 
 /**
- * TODO(P1): Add implementation
- *
  * @brief Remove an evictable frame from replacer.
  * This function should also decrement replacer's size if removal is successful.
  *
@@ -367,8 +356,6 @@ void ArcReplacer::Remove(frame_id_t frame_id) {
 }
 
 /**
- * TODO(P1): Add implementation
- *
  * @brief Return replacer's size, which tracks the number of evictable frames.
  *
  * @return size_t

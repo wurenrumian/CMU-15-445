@@ -142,7 +142,21 @@ class BufferPoolManager {
   /**
    * @brief The latch protecting the buffer pool's inner data structures.
    *
-   * TODO(P1) We recommend replacing this comment with details about what this latch actually protects.
+   * 保护的是**元数据**，不是页数据。具体覆盖：
+   *   - `page_table_`（page_id → frame_id 的映射）
+   *   - `free_frames_`（空闲帧链表）
+   *   - `next_page_id_` 之外的所有分配状态
+   *   - `replacer_` 的全部内部状态
+   *   - 每个 `FrameHeader` 的 `page_id_` / `pin_count_` / `is_dirty_`
+   *
+   * **不**保护 `FrameHeader::data_` —— 那是每帧自己的 `rwlatch_` 的职责。
+   * 这就是"两层粒度"的分工：元数据一把全局锁（临界区极短），页数据一帧一把锁
+   * （临界区可以很长，甚至包含磁盘 I/O）。
+   *
+   * 铁律：**绝不能持有 bpm_latch_ 去申请任何一把 rwlatch_**。
+   * 页锁可能被另一个线程长时间持有，而那个线程接下来可能要拿 bpm_latch_ ——
+   * 立刻死锁。`DeadlockTest` 专门压这一点。正确顺序永远是
+   * 「bpm 锁内 pin 住 → 放掉 bpm 锁 → 再取页锁」。
    */
   std::shared_ptr<std::mutex> bpm_latch_;
 

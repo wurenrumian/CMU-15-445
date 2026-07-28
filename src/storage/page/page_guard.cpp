@@ -25,7 +25,6 @@ namespace bustub {
  *
  * Note that only the buffer pool manager is allowed to call this constructor.
  *
- * TODO(P1): Add implementation.
  *
  * @param page_id The page ID of the page we want to read.
  * @param frame A shared pointer to the frame that holds the page we want to protect.
@@ -63,7 +62,6 @@ ReadPageGuard::ReadPageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> fra
  * Make sure you invalidate the other guard; otherwise, you might run into double free problems! For both objects, you
  * need to update _at least_ 5 fields each.
  *
- * TODO(P1): Add implementation.
  *
  * @param that The other page guard.
  */
@@ -96,7 +94,6 @@ ReadPageGuard::ReadPageGuard(ReadPageGuard &&that) noexcept
  * need to update _at least_ 5 fields each, and for the current object, make sure you release any resources it might be
  * holding on to.
  *
- * TODO(P1): Add implementation.
  *
  * @param that The other page guard.
  * @return ReadPageGuard& The newly valid `ReadPageGuard`.
@@ -150,8 +147,6 @@ auto ReadPageGuard::IsDirty() const -> bool {
 
 /**
  * @brief Flushes this page's data safely to disk.
- *
- * TODO(P1): Add implementation.
  */
 void ReadPageGuard::Flush() {
   BUSTUB_ENSURE(is_valid_, "tried to use an invalid read guard");
@@ -176,8 +171,6 @@ void ReadPageGuard::Flush() {
  * Make sure you don't double free! Also, think **very** **VERY** carefully about what resources you own and the order
  * in which you release those resources. If you get the ordering wrong, you will very likely fail one of the later
  * Gradescope tests. You may also want to take the buffer pool manager's latch in a very specific scenario...
- *
- * TODO(P1): Add implementation.
  */
 void ReadPageGuard::Drop() {
   // 幂等：对无效 guard（默认构造的、已被移走的、已经 Drop 过的）什么都不做。
@@ -229,7 +222,6 @@ ReadPageGuard::~ReadPageGuard() { Drop(); }
  *
  * Note that only the buffer pool manager is allowed to call this constructor.
  *
- * TODO(P1): Add implementation.
  *
  * @param page_id The page ID of the page we want to write to.
  * @param frame A shared pointer to the frame that holds the page we want to protect.
@@ -274,7 +266,6 @@ WritePageGuard::WritePageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> f
  * Make sure you invalidate the other guard; otherwise, you might run into double free problems! For both objects, you
  * need to update _at least_ 5 fields each.
  *
- * TODO(P1): Add implementation.
  *
  * @param that The other page guard.
  */
@@ -301,7 +292,6 @@ WritePageGuard::WritePageGuard(WritePageGuard &&that) noexcept
  * need to update _at least_ 5 fields each, and for the current object, make sure you release any resources it might be
  * holding on to.
  *
- * TODO(P1): Add implementation.
  *
  * @param that The other page guard.
  * @return WritePageGuard& The newly valid `WritePageGuard`.
@@ -362,8 +352,6 @@ auto WritePageGuard::IsDirty() const -> bool {
 
 /**
  * @brief Flushes this page's data safely to disk.
- *
- * TODO(P1): Add implementation.
  */
 void WritePageGuard::Flush() {
   BUSTUB_ENSURE(is_valid_, "tried to use an invalid write guard");
@@ -392,8 +380,6 @@ void WritePageGuard::Flush() {
  * Make sure you don't double free! Also, think **very** **VERY** carefully about what resources you own and the order
  * in which you release those resources. If you get the ordering wrong, you will very likely fail one of the later
  * Gradescope tests. You may also want to take the buffer pool manager's latch in a very specific scenario...
- *
- * TODO(P1): Add implementation.
  */
 void WritePageGuard::Drop() {
   if (!is_valid_) {

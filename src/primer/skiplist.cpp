@@ -92,6 +92,13 @@ SKIPLIST_TEMPLATE_ARGUMENTS void SkipList<K, Compare, MaxHeight, Seed>::Clear() 
 SKIPLIST_TEMPLATE_ARGUMENTS auto SkipList<K, Compare, MaxHeight, Seed>::Insert(const K &key) -> bool {
   std::unique_lock<std::shared_mutex> lock(rwlock_);
 
+  // ==== P0 STEP 5: 插入的四个阶段 ====
+  // 顺序不能调换，尤其是 5.2（去重）必须早于 5.3（掷骰子）：
+  // IntegrityCheckTest 用固定种子写死了 20 个节点各自的期望高度，
+  // 这要求 RandomHeight() 在每次 Insert 中**恰好被调用一次**，且只在
+  // 「确定要真正插入」之后调用。先掷高度再查重，会在重复插入时白白消耗
+  // 一个随机数，之后所有节点的高度全部错位。
+  //
   // ---- STEP 5.1: 找到每一层的前驱节点 ----
   // prevs 开满 MaxHeight 个槽位并预填 header_：这样即使随机高度超过当前 height_，
   // 那些「以前是空层」的槽位也已经是合法的 header_，无需再补写。
@@ -142,6 +149,11 @@ SKIPLIST_TEMPLATE_ARGUMENTS auto SkipList<K, Compare, MaxHeight, Seed>::Insert(c
 SKIPLIST_TEMPLATE_ARGUMENTS auto SkipList<K, Compare, MaxHeight, Seed>::Erase(const K &key) -> bool {
   std::unique_lock<std::shared_mutex> lock(rwlock_);
 
+  // ==== P0 STEP 6: 删除的四个阶段 ====
+  // 和 Insert 共用同一套「自顶向下逐层记录前驱」的骨架（STEP 5.1 / 6.1 完全一样），
+  // 差别只在拿到 prevs 之后做什么：插入是把新节点接进去，删除是把目标摘出来。
+  // 6.4 的收缩不影响正确性，但维持了「表非空时最高层必然有节点」这个不变量。
+  //
   // ---- STEP 6.1: 同样先定位每层前驱 ----
   std::vector<std::shared_ptr<SkipNode>> prevs(MaxHeight, header_);
   FindPredecessors(key, prevs);

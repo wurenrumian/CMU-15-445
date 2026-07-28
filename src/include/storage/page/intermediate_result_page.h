@@ -55,6 +55,10 @@ class IntermediateResultPage {
   /**
    * @brief 在页尾追加一条元组。
    * @return 空间不足时返回 false，调用方据此换一页新的。
+   *
+   * 注意返回 false 有两种含义，调用方必须区分：本页放不下（换页后能成功），
+   * 还是**这条元组比整页还大**（换多少页都放不下）。后者在本实现里无解，
+   * 调用方应当断言而不是静默丢弃——见 external_merge_sort_executor.cpp。
    */
   auto Append(const Tuple &tuple) -> bool {
     const uint32_t len = tuple.GetLength();
@@ -69,10 +73,11 @@ class IntermediateResultPage {
   }
 
   /**
-   * @brief 从字节偏移 `*offset` 处读出一条元组，并把 offset 推进到下一条。
+   * @brief 从字节偏移 `offset` 处读出一条元组。**不改变任何状态。**
    *
    * 顺序游标式的接口：调用方只需维护一个 uint32_t 偏移量，
-   * 不需要页内的槽位目录。
+   * 不需要页内的槽位目录。推进偏移量是 `SkipAt` 的职责——
+   * 两者必须分开，理由见下面 SkipAt 的注释。
    */
   auto ReadAt(uint32_t offset) const -> Tuple {
     Tuple tuple;

@@ -46,7 +46,13 @@ auto ExternalMergeSortExecutor<K>::MakeRun(const std::vector<Tuple> &sorted) -> 
       page = guard.template AsMut<IntermediateResultPage>();
       page->Init();
       pages.push_back(page_id);
-      page->Append(tuple);
+      // 换到空页后仍然失败，只可能是这条元组比整页还大。此时静默跳过会
+      // **无声地丢数据**（排序结果少几行，且没有任何报错），必须让它响亮地崩掉。
+      //
+      // 注意副作用调用必须写在宏**外面**：BUSTUB_ASSERT 展开成裸 assert()，
+      // 在 NDEBUG（Release）下整个表达式会被删掉，元组就再也不会被写进去了。
+      const bool appended = page->Append(tuple);
+      BUSTUB_ENSURE(appended, "tuple larger than one page cannot be spilled");
     }
   }
   guard.Drop();
@@ -74,7 +80,9 @@ auto ExternalMergeSortExecutor<K>::MergeTwoRuns(MergeSortRun &left, MergeSortRun
       page = guard.template AsMut<IntermediateResultPage>();
       page->Init();
       pages.push_back(page_id);
-      page->Append(tuple);
+      // 同上：副作用不能放进 assert 类宏里。
+      const bool appended = page->Append(tuple);
+      BUSTUB_ENSURE(appended, "tuple larger than one page cannot be spilled");
     }
   };
 

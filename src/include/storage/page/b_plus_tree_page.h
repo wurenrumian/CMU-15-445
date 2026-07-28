@@ -62,16 +62,19 @@ class BPlusTreePage {
   void SetMaxSize(int max_size);
   auto GetMinSize() const -> int;
 
-  /*
-   * TODO(P2): Remove __attribute__((__unused__)) if you intend to use the fields.
-   */
  private:
+  // ==== P2 STEP 0: 这 12 个字节就是每一页的公共页头 ====
+  // 三个字段都被实现用到了，所以骨架里的 __attribute__((__unused__)) 已按其
+  // 自带的提示移除。注意字段顺序和类型不能改：叶子页/内部页是靠
+  // `reinterpret_cast` 直接解释缓冲池里那 4KB 字节的，页头布局一变，
+  // 已经落盘的页就再也读不回来了。
+  //
   // Member variables, attributes that both internal and leaf page share
-  IndexPageType page_type_ __attribute__((__unused__));
-  // Number of key & value pairs in a page
-  int size_ __attribute__((__unused__));
+  IndexPageType page_type_;
+  // Number of key & value pairs in a page（**内部页存的是孩子个数**，见 STEP 2）
+  int size_;
   // Max number of key & value pairs in a page
-  int max_size_ __attribute__((__unused__));
+  int max_size_;
 };
 
 }  // namespace bustub

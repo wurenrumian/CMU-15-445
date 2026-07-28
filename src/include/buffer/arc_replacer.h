@@ -63,8 +63,6 @@ class ArcReplacer {
   DISALLOW_COPY_AND_MOVE(ArcReplacer);
 
   /**
-   * TODO(P1): Add implementation
-   *
    * @brief Destroys the LRUReplacer.
    */
   ~ArcReplacer() = default;

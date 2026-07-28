@@ -145,7 +145,6 @@ auto BufferPoolManager::Size() const -> size_t { return num_frames_; }
  * You will maintain a thread-safe, monotonically increasing counter in the form of a `std::atomic<page_id_t>`.
  * See the documentation on [atomics](https://en.cppreference.com/w/cpp/atomic/atomic) for more information.
  *
- * TODO(P1): Add implementation.
  *
  * @return The page ID of the newly allocated page.
  */
@@ -264,7 +263,6 @@ auto BufferPoolManager::FetchFrame(page_id_t page_id, AccessType access_type) ->
  *
  * You should call `DeallocatePage` in the disk scheduler to make the space available for new pages.
  *
- * TODO(P1): Add implementation.
  *
  * @param page_id The page ID of the page we want to delete.
  * @return `false` if the page exists but could not be deleted, `true` if the page didn't exist or deletion succeeded.
@@ -331,7 +329,6 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
  *
  * These two functions are the crux of this project, so we won't give you more hints than this. Good luck!
  *
- * TODO(P1): Add implementation.
  *
  * @param page_id The ID of the page we want to write to.
  * @param access_type The type of page access.
@@ -366,7 +363,6 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
  *
  * See the implementation details of `CheckedWritePage`.
  *
- * TODO(P1): Add implementation.
  *
  * @param page_id The ID of the page we want to read.
  * @param access_type The type of page access.
@@ -447,7 +443,6 @@ auto BufferPoolManager::ReadPage(page_id_t page_id, AccessType access_type) -> R
  * You should probably leave implementing this function until after you have completed `CheckedReadPage` and
  * `CheckedWritePage`, as it will likely be much easier to understand what to do.
  *
- * TODO(P1): Add implementation
  *
  * @param page_id The page ID of the page to be flushed.
  * @return `false` if the page could not be found in the page table; otherwise, `true`.
@@ -486,7 +481,6 @@ auto BufferPoolManager::FlushPageUnsafe(page_id_t page_id) -> bool {
  * You should probably leave implementing this function until after you have completed `CheckedReadPage`,
  * `CheckedWritePage`, and `Flush` in the page guards, as it will likely be much easier to understand what to do.
  *
- * TODO(P1): Add implementation
  *
  * @param page_id The page ID of the page to be flushed.
  * @return `false` if the page could not be found in the page table; otherwise, `true`.
@@ -538,8 +532,6 @@ auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
  *
  * You should probably leave implementing this function until after you have completed `CheckedReadPage`,
  * `CheckedWritePage`, and `FlushPage`, as it will likely be much easier to understand what to do.
- *
- * TODO(P1): Add implementation
  */
 void BufferPoolManager::FlushAllPagesUnsafe() {
   std::scoped_lock lock(*bpm_latch_);
@@ -559,8 +551,6 @@ void BufferPoolManager::FlushAllPagesUnsafe() {
  *
  * You should probably leave implementing this function until after you have completed `CheckedReadPage`,
  * `CheckedWritePage`, and `FlushPage`, as it will likely be much easier to understand what to do.
- *
- * TODO(P1): Add implementation
  */
 void BufferPoolManager::FlushAllPages() {
   // 先在锁内拷一份页号快照，再逐个调 FlushPage。
@@ -600,7 +590,6 @@ void BufferPoolManager::FlushAllPages() {
  * Again, if you are unfamiliar with atomic types, see the official C++ docs
  * [here](https://en.cppreference.com/w/cpp/atomic/atomic).
  *
- * TODO(P1): Add implementation
  *
  * @param page_id The page ID of the page we want to get the pin count of.
  * @return std::optional<size_t> The pin count if the page exists; otherwise, `std::nullopt`.

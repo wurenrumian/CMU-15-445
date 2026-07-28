@@ -1,19 +1,17 @@
-# P2 · 索引：带墓碑的 B+ 树与可扩展哈希
+# P2 · 索引：带墓碑的 B+ 树
 
-> **状态：B+ 树部分已完成，18 个测试（含 6 个并发测试）全部通过。**
+> **状态：B+ 树全部完成，18 个测试（含 6 个并发测试）通过。**
 > 第 1–4 节是从测试用例反推出的**精确行为规格**（骨架文档未给出），第 5 节起是实现记录。
-> 可扩展哈希表的情况见第 7 节。
+> 同目录下的可扩展哈希表判断为非本学期评分范围，未实现，理由见第 7 节。
 
 **涉及文件**
 - `src/storage/page/b_plus_tree_page.cpp`（公共页头）
 - `src/storage/page/b_plus_tree_leaf_page.cpp` / `b_plus_tree_internal_page.cpp`
 - `src/storage/index/b_plus_tree.cpp`（增删查主逻辑）
-- `src/storage/index/index_iterator.cpp`
-- `src/container/disk/hash/disk_extendible_hash_table.cpp`
+- `src/storage/index/index_iterator.cpp` + `src/include/storage/index/index_iterator.h`
 
 **测试**：`b_plus_tree_insert_test`、`b_plus_tree_delete_test`、`b_plus_tree_tombstone_test`、
-`b_plus_tree_concurrent_test`、`b_plus_tree_sequential_scale_test`、
-`extendible_htable_test`、`extendible_htable_concurrent_test`
+`b_plus_tree_concurrent_test`、`b_plus_tree_sequential_scale_test`
 
 ---
 

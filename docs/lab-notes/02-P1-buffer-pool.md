@@ -8,7 +8,7 @@
 - `src/buffer/buffer_pool_manager.cpp` + `src/include/buffer/buffer_pool_manager.h`
 
 **测试**：`arc_replacer_test`、`arc_replacer_performance_test`、`lru_k_replacer_test`、
-`disk_scheduler_test`、`page_guard_test`、`buffer_pool_manager_test`（共 12 个用例）
+`disk_scheduler_test`、`page_guard_test`、`buffer_pool_manager_test`（共 14 个用例，明细见第 7 节）
 
 ---
 

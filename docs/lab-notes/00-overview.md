@@ -44,12 +44,15 @@ BusTub 是一个"教学用但五脏俱全"的磁盘型关系数据库。五个 P
 | Project | 主题 | 关键产出 | 状态 | 教学报告 |
 |---|---|---|---|---|
 | P0 | C++ / 并发热身 | 读写锁保护的并发跳表 | ✅ 9/9 | [01-P0-跳表](./01-P0-skiplist.md) |
-| P1 | 缓冲池管理器 | ARC & LRU-K 替换器、磁盘调度器、RAII 页守卫、缓冲池 | ✅ 13/13 | [02-P1-缓冲池](./02-P1-buffer-pool.md) |
+| P1 | 缓冲池管理器 | ARC & LRU-K 替换器、磁盘调度器、RAII 页守卫、缓冲池 | ✅ 14/14 | [02-P1-缓冲池](./02-P1-buffer-pool.md) |
 | P2 | 索引 | 带墓碑的 B+ 树（含并发） | ✅ 18/18 | [03-P2-索引](./03-P2-index.md) |
 | P3 | 查询执行 | 12 个算子 + 3 条优化器规则 | ✅ 20/20 | [04-P3-执行引擎](./04-P3-execution.md) |
 | P4 | 并发控制 | MVCC 全套：时间戳、水位线、版本链、写冲突、主键约束、GC、可串行化 | ✅ 25/25 | [05-P4-并发控制](./05-P4-concurrency.md) |
 
-**合计 85 个测试全部通过**（P0–P2 的 40 个单元测试 + P3 的 20 个 SQL 测试 + P4 的 25 个事务测试）。
+**合计 86 个测试全部通过**（P0–P2 的 41 个单元测试 + P3 的 20 个 SQL 测试 + P4 的 25 个事务测试）。
+
+P1 的 14 个用例包含 `arc_replacer_performance_test`（1 个），它测的是吞吐而非正确性，
+但同样是评分项——朴素实现会因 `Evict` 的 O(n) 扫描超时。
 
 未完成的只剩两项，且在骨架里都**没有 `TODO(Pn)` 标记**（用的是
 `throw NotImplementedException` 而非 `UNIMPLEMENTED("TODO(Pn)...")`），
@@ -87,14 +90,22 @@ BusTub 是一个"教学用但五脏俱全"的磁盘型关系数据库。五个 P
 - `---- STEP k.m: 标题 ----` —— 步骤内部的子阶段。
 - 普通注释只解释**为什么**，不复述代码在做什么。
 
+全部 91 个主标记（另有 16 个子标记）的清单见
+**[附录 · STEP 标记总索引](./99-step-index.md)**，
+可以从"我想看某个概念"直接跳到对应文件。按编号顺序读下来，
+本身就是一条从零搭出数据库的路径。
+
 ## 如何构建与测试
 
 ```bash
 mkdir -p build && cd build
 cmake -DCMAKE_BUILD_TYPE=Debug ..
 
+# 并行度：Linux 用 nproc，macOS 没有这个命令
+JOBS=$( (nproc 2>/dev/null) || sysctl -n hw.ncpu )
+
 # 构建并运行某个测试
-make skiplist_test -j$(nproc)
+make skiplist_test -j"$JOBS"
 ./test/skiplist_test
 
 # 课程测试默认带 DISABLED_ 前缀，本地验证需要显式打开
@@ -106,12 +117,36 @@ make check-lint    # cpplint
 make check-clang-tidy-p1
 ```
 
+> **踩坑提醒（重要）**：`cmake --build .` **不会**可靠地重新链接单个 gtest 目标。
+> 改完代码后必须显式指定目标：`cmake --build . --target txn_scan_test`
+> （或 `make txn_scan_test`）。我因为这个问题两次追查"根本不存在的 bug"——
+> 跑的一直是旧二进制。**任何"改了代码但行为没变"的现象，先怀疑没重新构建。**
+
 > **注意**：本仓库在 macOS 上运行 `check-clang-tidy-*` 会报
 > `bugprone-forward-declaration-namespace` 错误，位置在 `catalog/column.h`、
 > `catalog/schema.h`、`type/value.h`。这是 macOS SDK 里 `typedef union {...}`
 > 触发的 clang-tidy 误报，在**未修改的干净仓库上同样复现**，与实验代码无关。
 
-## 学术诚信提醒
+## 关于公开发布
 
-仓库 README 明确要求：不要把实现公开发布到 GitHub 等公开代码库。
-本报告与代码仅用于个人学习记录，请保持仓库私有。
+BusTub 的 README 里有一段明确的要求：
+
+> DO NOT PUSH PROJECT SOLUTIONS PUBLICLY. THIS IS AN ACADEMIC INTEGRITY VIOLATION...
+> IF YOU ARE A STUDENT OUTSIDE CMU, DO NOT MAKE YOUR SOLUTION PUBLICLY AVAILABLE,
+> OTHERWISE YOU WILL BE BANNED FROM USING THE AUTOGRADER.
+
+把事实说清楚，读到这里的人自己判断：
+
+- **法律上**：BusTub 采用 MIT 许可证，公开发布派生作品是许可证明确允许的。这一条没有争议。
+- **规则上**：上面那段话是课程组的**请求**，不是合同。本仓库的作者不是 CMU 在读学生，
+  没有签署任何课程协议，也从未使用 Gradescope 提交，因此不存在"违反学术诚信"或
+  "被封禁"的适用对象。
+- **实际影响**：真正的代价落在**别人**身上——公开答案会让后来的选课学生更容易抄，
+  也会增加课程组每年重写测试的负担。这是唯一实质性的理由，且它是道义层面的，不是法律层面的。
+
+本仓库选择公开，主要是把它当作**教学材料**而非"答案"：报告里大量篇幅在讲
+"为什么这样写"、"我踩了哪些坑"、"测试是怎么把规格锁死的"，这些内容抄不出分数，
+但对想学明白的人有用。
+
+如果你是**正在修这门课的学生**：请自己写。这套实验最有价值的部分恰恰是调试过程本身——
+你在 `TombstoneCoalesceTest` 上卡的那两个小时，比读完这整份报告学到的都多。
