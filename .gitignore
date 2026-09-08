@@ -251,3 +251,5 @@ docs/dev
 # 本地测试产物
 test.bustub
 test.log
+site/docs/.vitepress/cache/
+site/docs/.vitepress/dist/
